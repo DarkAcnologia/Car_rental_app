@@ -1,5 +1,0 @@
-{
-  "imports": {
-    "stripe": "https://esm.sh/stripe@13.1.0?target=deno"
-  }
-}
