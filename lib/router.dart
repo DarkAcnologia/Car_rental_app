@@ -10,6 +10,7 @@ import 'screens/map_screen.dart';
 import 'screens/payment_method_screen.dart';
 import 'screens/save_card_screen.dart';
 import 'screens/instruction_screen.dart';
+import 'screens/terms_of_use_screen.dart';
 
 final GoRouter router = GoRouter(
   initialLocation: '/',
