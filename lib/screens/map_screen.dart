@@ -5,6 +5,8 @@ import 'package:yandex_mapkit/yandex_mapkit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:car_rental_app/state/trip_state.dart';
 import 'filter_screen.dart';
+import 'shared_payment_screen.dart';
+import 'contributor_input_screen.dart';
 import 'menu_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -798,7 +800,6 @@ void _stopTrip() async {
 
   final now = DateTime.now().toUtc();
 
-  // Получаем активную бронь
   final booking = await Supabase.instance.client
       .from('bookings')
       .select()
@@ -807,7 +808,6 @@ void _stopTrip() async {
       .eq('status', 'active')
       .maybeSingle();
 
-  // Обновляем бронь на "finished", если она существует
   if (booking != null) {
     await Supabase.instance.client
         .from('bookings')
@@ -818,21 +818,41 @@ void _stopTrip() async {
         .eq('id', booking['id']);
   }
 
-  if (trip.totalPrice > 0) {
+  String? paymentMode;
+  if (trip.totalPrice > 0 && context.mounted) {
+    paymentMode = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Как вы хотите оплатить?'),
+        content: const Text('Выберите способ оплаты:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'solo'),
+            child: const Text('Оплатить сам'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'shared'),
+            child: const Text('Разделить счёт'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  final bookingResponse = await Supabase.instance.client
+      .from('bookings')
+      .select('id')
+      .eq('car_id', trip.activeCar!['id'])
+      .eq('user_id', user.id)
+      .eq('status', 'finished')
+      .order('end_time', ascending: false)
+      .limit(1)
+      .single();
+
+  final bookingId = bookingResponse['id'];
+
+  if (trip.totalPrice > 0 && paymentMode == 'solo') {
     try {
-      // получаем ID только что завершенной брони
-      final bookingResponse = await Supabase.instance.client
-          .from('bookings')
-          .select('id')
-          .eq('car_id', trip.activeCar!['id'])
-          .eq('user_id', user.id)
-          .eq('status', 'finished')
-          .order('end_time', ascending: false)
-          .limit(1)
-          .single();
-
-      final bookingId = bookingResponse['id'];
-
       final paymentResponse = await http.post(
         Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/create-payment-intent'),
         headers: {'Content-Type': 'application/json'},
@@ -853,7 +873,91 @@ void _stopTrip() async {
     }
   }
 
-  // Отображаем итоги
+  if (trip.totalPrice > 0 && paymentMode == 'shared') {
+   // Открываем экран ввода участников
+final contributors = await Navigator.push<List<Map<String, dynamic>>>(
+  context,
+  MaterialPageRoute(
+    builder: (_) => ContributorInputScreen(
+      totalAmount: trip.totalPrice,
+      bookingId: bookingId,
+    ),
+  ),
+);
+
+if (contributors == null || contributors.isEmpty) {
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Вы не добавили ни одного участника')),
+    );
+  }
+  return;
+}
+
+// Показываем индикатор загрузки
+if (context.mounted) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
+}
+
+final paymentLinks = <Map<String, dynamic>>[];
+
+for (final c in contributors) {
+  final response = await Supabase.instance.client
+      .from('split_payments')
+      .insert({
+        'booking_id': bookingId,
+        'contributor_name': c['name'],
+        'amount': c['amount'],
+      })
+      .select()
+      .single();
+
+  final splitId = response['id'];
+
+  final linkRes = await http.post(
+    Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/create-split-payment'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({
+      'split_payment_id': splitId,
+    }),
+  );
+
+  final linkData = jsonDecode(linkRes.body);
+  if (linkRes.statusCode == 200 && linkData['url'] != null) {
+    paymentLinks.add({
+      'name': c['name'],
+      'amount': c['amount'],
+      'link': linkData['url'],
+    });
+  } else {
+    debugPrint('❌ Ошибка при создании ссылки для ${c['name']}: ${linkData['error']}');
+  }
+}
+
+// Закрываем индикатор
+if (context.mounted) Navigator.pop(context);
+
+// Открываем SharedPaymentScreen
+if (context.mounted) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => SharedPaymentScreen(
+        bookingId: bookingId,
+        contributors: paymentLinks,
+      ),
+    ),
+  );
+}
+
+  }
+
   Duration duration = Duration.zero;
   if (trip.startTime != null) {
     duration = now.difference(trip.startTime!.toUtc());
@@ -869,23 +973,23 @@ void _stopTrip() async {
 🚗 Статус: Завершено
 ''';
 
-  if (context.mounted) {
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Поездка завершена'),
-        content: Text(summary),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ОК'),
-          )
-        ],
-      ),
-    );
-  }
+  if (context.mounted && paymentMode != 'shared') {
+  await showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Поездка завершена'),
+      content: Text(summary),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ОК'),
+        )
+      ],
+    ),
+  );
+}
 
-  // Сброс состояния
+
   setState(() {
     trip
       ..activeCar = null
@@ -897,8 +1001,6 @@ void _stopTrip() async {
 
   _fetchCars();
 }
-
-
 
 
 void _togglePause() async {
