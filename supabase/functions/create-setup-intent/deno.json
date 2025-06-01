@@ -1,0 +1,15 @@
+{
+  "importMap": "./import_map.json",
+  "tasks": {
+    "start": "deno run -A index.ts"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
+  },
+  "lock": false,
+  "secrets": ["STRIPE_SECRET_KEY"],
+  "permissions": {
+    "env": true,
+    "net": true
+  }
+}

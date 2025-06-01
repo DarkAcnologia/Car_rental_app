@@ -1,0 +1,36 @@
+name: car_rental_app
+description: A simple car rental Flutter app with map and booking features.
+publish_to: 'none'
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  yandex_mapkit: ^3.3.3
+  geolocator: ^11.0.0
+  supabase_flutter: ^1.10.5
+  firebase_core: ^2.27.0
+  firebase_messaging: ^14.7.10
+  google_sign_in: ^6.1.5
+  image_picker: ^1.0.7
+  go_router: ^13.1.0
+  flutter_stripe: ^11.5.0
+  http: ^1.4.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/user.png
+    - assets/car.png
+
+dependency_overrides:
+  sign_in_with_apple:
+    path: .fake/sign_in_with_apple
+
