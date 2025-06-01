@@ -37,8 +37,9 @@ class _SaveCardScreenState extends State<SaveCardScreen> {
       for (var card in cards) {
         final methodId = card['stripe_payment_method_id'];
         final stripeDetails = await _getStripeCardDetails(methodId);
-        card['brand'] = stripeDetails['card']?['brand'] ?? 'unknown';
-        card['last4'] = stripeDetails['card']?['last4'] ?? '****';
+card['brand'] = stripeDetails['brand'] ?? 'unknown';
+card['last4'] = stripeDetails['last4'] ?? '****';
+
       }
 
       setState(() {

@@ -20,19 +20,15 @@ Deno.serve(async (req) => {
     };
 
     // 1. Получаем бронирование
-    const bookingRes = await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${booking_id}`, {
-      headers,
-    });
-    const booking = await bookingRes.json();
-    const data = booking[0];
+    const bookingRes = await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${booking_id}`, { headers });
+    const bookingData = await bookingRes.json();
+    const data = bookingData[0];
 
-    const amountRub = Number(data.total_price);
-
-    if (!data || data.status !== "finished" || amountRub <= 0) {
+    if (!data || data.status !== "finished") {
       return new Response(JSON.stringify({ error: "Invalid or unpaid booking" }), { status: 400 });
     }
 
-    // 💥 Проверка: Stripe не принимает суммы < 50 RUB (≈0.5 EUR)
+    const amountRub = Number(data.total_price);
     if (amountRub < 50) {
       return new Response(JSON.stringify({
         error: `Минимальная сумма для оплаты Stripe — 50₽. Сейчас: ${amountRub.toFixed(2)}₽`,
@@ -61,14 +57,35 @@ Deno.serve(async (req) => {
       confirm: true,
       off_session: true,
       metadata: {
-        booking_id: booking_id,
-        user_id: user_id,
+        booking_id,
+        user_id,
       },
     });
 
-    return new Response(JSON.stringify({ success: true, payment_status: intent.status }), { status: 200 });
+    // 4. Обновляем статус оплаты в Supabase
+    const paymentStatus = intent.status === "succeeded" ? "success" : "failed";
+    const updateRes = await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${booking_id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ payment_status: paymentStatus }),
+    });
+
+    const updateText = await updateRes.text();
+    if (!updateRes.ok) {
+      return new Response(JSON.stringify({
+        error: `Failed to update booking status. Status ${updateRes.status}, Response: ${updateText}`,
+      }), { status: 500 });
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      payment_status: paymentStatus,
+      stripe_status: intent.status,
+    }), { status: 200 });
 
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500 });
+    return new Response(JSON.stringify({
+      error: e instanceof Error ? e.message : String(e),
+    }), { status: 500 });
   }
 });

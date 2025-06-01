@@ -134,55 +134,93 @@ class _MapScreenState extends State<MapScreen> {
               },
               mapObjects: [
                 if (userPlacemark != null) userPlacemark!,
-                ...applyFilters(cars).map((car) {
-                  final lat = (car['latitude'] as num?)?.toDouble();
-                  final lng = (car['longitude'] as num?)?.toDouble();
-                  if (lat == null || lng == null) return null;
-                  return PlacemarkMapObject(
-                    mapId: MapObjectId(car['id']),
-                    point: Point(latitude: lat, longitude: lng),
-                    icon: PlacemarkIcon.single(
-                      PlacemarkIconStyle(
-                        image: BitmapDescriptor.fromAssetImage('assets/car.png'),
-                        scale: 2,
-                        
-                      ),
-                    ),
-                    onTap: (_, __) async {
-                      final user = Supabase.instance.client.auth.currentUser;
-                      if (user == null) return;
-                      final response = await Supabase.instance.client
-                          .from('profiles')
-                          .select()
-                          .eq('id', user.id)
-                          .maybeSingle();
-                      final profile = response as Map<String, dynamic>?;
-                      if (profile == null || profile['is_verified'] != true) {
-                        if (context.mounted) {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              backgroundColor: theme.colorScheme.surface,
-                              titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
-                              contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-                              title: const Text('Аккаунт не верифицирован'),
-                              content: const Text('Ожидайте подтверждения ваших данных администрацией.'),
-                              actions: [
-                                TextButton(
-                                  child: const Text('ОК'),
-                                  onPressed: () => Navigator.of(context).pop(),
-                                )
-                              ],
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                      setState(() => selectedCar = car);
-                      _showCarBottomSheet(context, car);
-                    },
-                  );
-                }).whereType<PlacemarkMapObject>(),
+...applyFilters(cars).map((car) {
+  final lat = (car['latitude'] as num?)?.toDouble();
+  final lng = (car['longitude'] as num?)?.toDouble();
+  if (lat == null || lng == null) return null;
+
+  return PlacemarkMapObject(
+    mapId: MapObjectId(car['id']),
+    point: Point(latitude: lat, longitude: lng),
+    icon: PlacemarkIcon.single(
+      PlacemarkIconStyle(
+        image: BitmapDescriptor.fromAssetImage('assets/car.png'),
+        scale: 2,
+      ),
+    ),
+    onTap: (_, __) async {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final theme = Theme.of(context);
+
+      // 1. Проверка верификации
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final profile = response as Map<String, dynamic>?;
+
+      if (profile == null || profile['is_verified'] != true) {
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+              contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+              title: const Text('Аккаунт не верифицирован'),
+              content: const Text('Ожидайте подтверждения ваших данных администрацией.'),
+              actions: [
+                TextButton(
+                  child: const Text('ОК'),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // 2. Проверка задолженности
+      final unpaidRes = await Supabase.instance.client
+          .from('bookings')
+          .select()
+          .eq('user_id', user.id)
+          .eq('payment_status', 'failed');
+
+      if (unpaidRes != null && unpaidRes is List && unpaidRes.isNotEmpty) {
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+              contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+              title: const Text('Неоплаченная поездка'),
+              content: const Text('У вас есть поездка с неуспешной оплатой. Погасите задолженность перед новой арендой.Это можно сделать в истории бронированний'),
+              actions: [
+                TextButton(
+                  child: const Text('ОК'),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // 3. Всё в порядке — показываем машину
+      setState(() => selectedCar = car);
+      _showCarBottomSheet(context, car);
+    },
+  );
+}).whereType<PlacemarkMapObject>(),
+
               ],
             ),
           ),
@@ -258,7 +296,7 @@ Widget _buildTripOverlay() {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: trip.isPaused ? Colors.orange.withOpacity(0.2) : colorScheme.surface,
+          color: trip.isPaused ? Colors.orange.withOpacity(1.0) : colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6)],
         ),
@@ -867,9 +905,32 @@ void _togglePause() async {
   final user = Supabase.instance.client.auth.currentUser;
   if (user == null || trip.activeCar == null) return;
 
+  final isPausing = !trip.isPaused;
+
+  if (isPausing) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Пауза поездки'),
+        content: const Text('Во время паузы будет списываться 50% от стоимости аренды в минуту. Продолжить?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Да'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+  }
 
   setState(() {
-    trip.isPaused = !trip.isPaused;
+    trip.isPaused = isPausing;
   });
 
   await Supabase.instance.client
@@ -893,6 +954,7 @@ void _togglePause() async {
     ),
   );
 }
+
 Future<void> _billInitialMinute() async {
   final user = Supabase.instance.client.auth.currentUser;
   if (user == null || trip.activeCar == null) return;

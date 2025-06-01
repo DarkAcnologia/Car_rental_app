@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
 class BookingHistoryScreen extends StatefulWidget {
   const BookingHistoryScreen({super.key});
@@ -30,6 +32,33 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
       bookings = List<Map<String, dynamic>>.from(response);
       isLoading = false;
     });
+  }
+
+  Future<void> _payDebt(String bookingId) async {
+final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    if (userId == null) return;
+
+    final res = await http.post(
+      Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/create-payment-intent'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'booking_id': bookingId,
+      }),
+    );
+
+    final result = jsonDecode(res.body);
+    if (res.statusCode == 200 && result['payment_status'] == 'success') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Оплата прошла успешно')),
+      );
+      _loadBookings(); // обновить после оплаты
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Ошибка оплаты: ${result['error'] ?? 'Неизвестно'}')),
+      );
+    }
   }
 
   void _showCarDetails(Map<String, dynamic> car) {
@@ -91,7 +120,20 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   itemBuilder: (context, index) {
                     final booking = bookings[index];
                     final car = booking['cars'];
+                    final paymentStatus = booking['payment_status'];
+                    final total = booking['total_price'] ?? 0;
+
+                    Color tileColor;
+                    if (paymentStatus == 'success') {
+                      tileColor = Colors.green.withOpacity(0.1);
+                    } else if (paymentStatus == 'failed') {
+                      tileColor = Colors.red.withOpacity(0.1);
+                    } else {
+                      tileColor = Colors.yellow.withOpacity(0.1);
+                    }
+
                     return Card(
+                      color: tileColor,
                       margin: const EdgeInsets.symmetric(vertical: 8),
                       child: ListTile(
                         leading: car['image_url'] != null
@@ -106,11 +148,35 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                               )
                             : const Icon(Icons.directions_car),
                         title: Text(car['name'] ?? 'Неизвестная машина'),
-                        subtitle: Text(
-                          'С ${booking['start_time'].toString().substring(0, 16).replaceAll('T', ' ')}\n'
-                          'По ${booking['end_time'].toString().substring(0, 16).replaceAll('T', ' ')}',
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'С ${booking['start_time'].toString().substring(0, 16).replaceAll('T', ' ')}\n'
+                              'По ${booking['end_time'].toString().substring(0, 16).replaceAll('T', ' ')}',
+                            ),
+                            const SizedBox(height: 4),
+                            Text('💰 Сумма: ${total.toStringAsFixed(2)} ₽'),
+                            if (paymentStatus == 'failed')
+                              Text(
+                                '❗ Оплата не прошла',
+                                style: TextStyle(color: Colors.red[900], fontWeight: FontWeight.bold),
+                              ),
+                            if (paymentStatus == 'success')
+                              const Text('✅ Оплачено', style: TextStyle(color: Colors.green)),
+                          ],
                         ),
                         isThreeLine: true,
+                        trailing: paymentStatus == 'failed'
+                            ? ElevatedButton(
+                                onPressed: () => _payDebt(booking['id']),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Оплатить'),
+                              )
+                            : null,
                         onTap: () => _showCarDetails(car),
                       ),
                     );
