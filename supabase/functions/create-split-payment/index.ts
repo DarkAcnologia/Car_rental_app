@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
       Authorization: `Bearer ${supabaseKey}`,
     };
 
-    // Получаем информацию о платеже
+    // Получаем split_payment по ID
     const splitRes = await fetch(
       `${supabaseUrl}/rest/v1/split_payments?id=eq.${split_payment_id}`,
       { headers }
@@ -30,23 +30,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Split payment not found" }), { status: 404 });
     }
 
-    // 1. Создаем продукт
-    const product = await stripe.products.create({
-      name: `Оплата от ${payment.contributor_name}`,
-    });
-
-    // 2. Создаем цену
-    const price = await stripe.prices.create({
-      unit_amount: Math.round(payment.amount * 100),
-      currency: "rub",
-      product: product.id,
-    });
-
-    // 3. Создаем ссылку оплаты
-    const link = await stripe.paymentLinks.create({
+    // Создаём Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
       line_items: [
         {
-          price: price.id,
+          price_data: {
+            currency: "rub",
+            product_data: {
+              name: `Оплата от ${payment.contributor_name}`,
+            },
+            unit_amount: Math.round(payment.amount * 100),
+          },
           quantity: 1,
         },
       ],
@@ -55,14 +51,13 @@ Deno.serve(async (req) => {
         booking_id: payment.booking_id,
         contributor: payment.contributor_name,
       },
+      success_url: "https://example.com/success", // заменишь на нужный
+      cancel_url: "https://example.com/cancel",
     });
 
-    return new Response(JSON.stringify({ url: link.url }), { status: 200 });
-
+    return new Response(JSON.stringify({ url: session.url }), { status: 200 });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
-      { status: 500 }
-    );
+    const errorMessage = e instanceof Error ? e.message : "Unknown error";
+    return new Response(JSON.stringify({ error: errorMessage }), { status: 500 });
   }
 });

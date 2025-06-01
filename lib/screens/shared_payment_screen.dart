@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'dart:convert';
-import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter/services.dart';
@@ -25,11 +25,21 @@ class SharedPaymentScreen extends StatefulWidget {
 class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
   List<Map<String, dynamic>> paymentLinks = [];
   bool isLoading = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _processPayments();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _processPayments();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _processPayments() async {
@@ -40,27 +50,30 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
     final List<Map<String, dynamic>> links = [];
 
     for (final c in widget.contributors) {
-      final splitId = const Uuid().v4();
-
-      final insertRes = await http.post(
-        Uri.parse('$supabaseUrl/split_payments'),
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': 'Bearer $supabaseKey',
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation',
-        },
+      // 1. Проверка оплаты
+      await http.post(
+        Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/check-split-payment-status'),
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'id': splitId,
           'booking_id': widget.bookingId,
           'contributor_name': c['name'],
-          'amount': c['amount'],
-          'is_paid': false,
         }),
       );
 
-      if (insertRes.statusCode != 201) continue;
+      // 2. Получаем запись из Supabase
+      final response = await supabase
+          .from('split_payments')
+          .select()
+          .eq('booking_id', widget.bookingId)
+          .eq('contributor_name', c['name'])
+          .maybeSingle();
 
+      if (response == null) continue;
+
+      final splitId = response['id'];
+      final isPaid = response['is_paid'] == true;
+
+      // 3. Получаем ссылку
       final splitRes = await http.post(
         Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/create-split-payment'),
         headers: {'Content-Type': 'application/json'},
@@ -73,6 +86,7 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
           'name': c['name'],
           'amount': c['amount'],
           'link': result['url'],
+          'isPaid': isPaid,
         });
       }
     }
@@ -121,6 +135,7 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
                 final url = item['link'] as String;
                 final name = item['name'];
                 final amount = item['amount'];
+                final isPaid = item['isPaid'] == true;
 
                 return Card(
                   margin: const EdgeInsets.all(12),
@@ -130,9 +145,17 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '$name — ${amount.toStringAsFixed(2)} ₽',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '$name — ${amount.toStringAsFixed(2)} ₽',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (isPaid)
+                              const Icon(Icons.check_circle, color: Colors.green),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         Center(
