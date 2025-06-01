@@ -44,23 +44,10 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
 
   Future<void> _processPayments() async {
     final supabase = Supabase.instance.client;
-    final supabaseUrl = supabase.restUrl;
-    final supabaseKey = supabase.supabaseKey;
-
     final List<Map<String, dynamic>> links = [];
 
     for (final c in widget.contributors) {
-      // 1. Проверка оплаты
-      await http.post(
-        Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/check-split-payment-status'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'booking_id': widget.bookingId,
-          'contributor_name': c['name'],
-        }),
-      );
-
-      // 2. Получаем запись из Supabase
+      // Получаем split_payment для участника
       final response = await supabase
           .from('split_payments')
           .select()
@@ -73,7 +60,14 @@ class _SharedPaymentScreenState extends State<SharedPaymentScreen> {
       final splitId = response['id'];
       final isPaid = response['is_paid'] == true;
 
-      // 3. Получаем ссылку
+      // Вызываем проверку оплаты с split_payment_id
+      await http.post(
+        Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/check-split-payment-status'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'split_payment_id': splitId}),
+      );
+
+      // Получаем ссылку на оплату
       final splitRes = await http.post(
         Uri.parse('https://jekylcxrzokwdjlknxjz.functions.supabase.co/create-split-payment'),
         headers: {'Content-Type': 'application/json'},

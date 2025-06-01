@@ -1,10 +1,4 @@
 // supabase/functions/check-split-payment-status/index.ts
-import Stripe from "https://esm.sh/stripe@13.1.0?target=deno";
-
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
-  apiVersion: "2022-11-15",
-});
-
 Deno.serve(async (req) => {
   try {
     const { split_payment_id } = await req.json();
@@ -22,61 +16,80 @@ Deno.serve(async (req) => {
       Authorization: `Bearer ${supabaseKey}`,
     };
 
-    // 1. Найдём PaymentIntent по метаданным
-    const paymentIntents = await stripe.paymentIntents.search({
-      query: `metadata["split_payment_id"]:"${split_payment_id}"`,
-    });
-
-    const intent = paymentIntents.data.find(
-      (i: Stripe.PaymentIntent) => i.status === "succeeded"
+    // Получаем split_payment по ID
+    const splitRes = await fetch(
+      `${supabaseUrl}/rest/v1/split_payments?id=eq.${split_payment_id}`,
+      { headers }
     );
-
-    if (!intent) {
-      return new Response(JSON.stringify({ paid: false }), { status: 200 });
+    const splitData = await splitRes.json();
+    const payment = splitData[0];
+    if (!payment) {
+      return new Response(JSON.stringify({ paid: false }), { status: 404 });
     }
 
-    // 2. Обновим split_payments
-    await fetch(`${supabaseUrl}/rest/v1/split_payments?id=eq.${split_payment_id}`, {
-      method: "PATCH",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify({ is_paid: true }),
-    });
+    const bookingId = payment.booking_id;
 
-    // 3. Получаем booking_id из записи split_payment
-    const splitRes = await fetch(`${supabaseUrl}/rest/v1/split_payments?id=eq.${split_payment_id}`, {
-      headers,
-    });
-    const splitJson = await splitRes.json();
-    const bookingId = splitJson[0]?.booking_id;
+    // Получаем всех с unpaid
+    const unpaidRes = await fetch(
+      `${supabaseUrl}/rest/v1/split_payments?booking_id=eq.${bookingId}&is_paid=eq.false`,
+      { headers }
+    );
+    const unpaid = await unpaidRes.json();
 
-    // 4. Если все оплатили — обновляем bookings.payment_status = 'paid'
-    if (bookingId) {
-      const unpaidRes = await fetch(
-        `${supabaseUrl}/rest/v1/split_payments?booking_id=eq.${bookingId}&is_paid=eq.false`,
+    if (unpaid.length === 0) {
+      // Все оплатили — статус success
+      await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}`, {
+        method: "PATCH",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          payment_status: "success",
+          unpaid_amount: 0
+        }),
+      });
+    } else {
+      // Часть не оплатили — считаем сколько уже оплачено
+      const paidRes = await fetch(
+        `${supabaseUrl}/rest/v1/split_payments?booking_id=eq.${bookingId}&is_paid=eq.true`,
         { headers }
       );
-      const unpaid = await unpaidRes.json();
+      const paid = await paidRes.json();
+      const paidAmount = paid.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
 
-      if (unpaid.length === 0) {
-        await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}`, {
-          method: "PATCH",
-          headers: {
-            ...headers,
-            "Content-Type": "application/json",
-            Prefer: "return=representation",
-          },
-          body: JSON.stringify({ payment_status: 'paid' }),
-        });
-      }
+      // Получаем общую стоимость из booking
+      const bookingRes = await fetch(
+        `${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}&select=total_price`,
+        { headers }
+      );
+      const bookingJson = await bookingRes.json();
+      const totalPrice = bookingJson[0]?.total_price ?? 0;
+
+      const unpaidAmount = totalPrice - paidAmount;
+
+      // Обновляем booking
+      await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}`, {
+        method: "PATCH",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          payment_status: "failed",
+          unpaid_amount: unpaidAmount
+        }),
+      });
     }
 
-    return new Response(JSON.stringify({ paid: true }), { status: 200 });
+    return new Response(JSON.stringify({ paid: payment.is_paid }), { status: 200 });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500 }
+    );
   }
 });

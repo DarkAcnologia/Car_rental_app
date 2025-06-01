@@ -42,6 +42,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         Provider.google,
+        redirectTo: 'https://jekylcxrzokwdjlknxjz.supabase.co/auth/v1/callback?prompt=select_account',
       );
     } on AuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -35,8 +35,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   }
 
   Future<void> _payDebt(String bookingId) async {
-final userId = Supabase.instance.client.auth.currentUser?.id;
-
+    final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
     final res = await http.post(
@@ -53,7 +52,7 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ Оплата прошла успешно')),
       );
-      _loadBookings(); // обновить после оплаты
+      _loadBookings();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ Ошибка оплаты: ${result['error'] ?? 'Неизвестно'}')),
@@ -62,9 +61,13 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
   }
 
   void _showCarDetails(Map<String, dynamic> car) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final backgroundColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: backgroundColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -78,7 +81,7 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
               height: 5,
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: isDark ? Colors.grey[600] : Colors.grey[300],
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -94,12 +97,12 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
             const SizedBox(height: 10),
             Text(
               car['name'] ?? 'Без названия',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
             ),
             const SizedBox(height: 6),
-            Text(car['description'] ?? 'Описание недоступно'),
+            Text(car['description'] ?? 'Описание недоступно', style: TextStyle(color: textColor)),
             const SizedBox(height: 6),
-            Text('Цена за минуту: ${car['price_per_minute']} ₽'),
+            Text('Цена за минуту: ${car['price_per_minute']} ₽', style: TextStyle(color: textColor)),
           ],
         ),
       ),
@@ -122,6 +125,7 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
                     final car = booking['cars'];
                     final paymentStatus = booking['payment_status'];
                     final total = booking['total_price'] ?? 0;
+                    final unpaidAmount = booking['unpaid_amount'] ?? 0;
 
                     Color tileColor;
                     if (paymentStatus == 'success') {
@@ -157,17 +161,28 @@ final userId = Supabase.instance.client.auth.currentUser?.id;
                             ),
                             const SizedBox(height: 4),
                             Text('💰 Сумма: ${total.toStringAsFixed(2)} ₽'),
-                            if (paymentStatus == 'failed')
+                            if (paymentStatus == 'failed' && unpaidAmount > 0) ...[
+                              Text(
+                                '🔻 Осталось оплатить: ${unpaidAmount.toStringAsFixed(2)} ₽',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               Text(
                                 '❗ Оплата не прошла',
-                                style: TextStyle(color: Colors.red[900], fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  color: Colors.red[900],
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
+                            ],
                             if (paymentStatus == 'success')
-                              const Text('✅ Оплачено', style: TextStyle(color: Colors.green)),
+                              const Text(
+                                '✅ Оплачено',
+                                style: TextStyle(color: Colors.green),
+                              ),
                           ],
                         ),
                         isThreeLine: true,
-                        trailing: paymentStatus == 'failed'
+                        trailing: (paymentStatus == 'failed' && unpaidAmount > 0)
                             ? ElevatedButton(
                                 onPressed: () => _payDebt(booking['id']),
                                 style: ElevatedButton.styleFrom(

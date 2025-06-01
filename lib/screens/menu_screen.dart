@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:car_rental_app/screens/booking_history_screen.dart';
 import 'package:car_rental_app/screens/login_screen.dart';
 import 'package:car_rental_app/screens/save_card_screen.dart';
-
 import '../main.dart';
 import 'package:car_rental_app/state/trip_state.dart';
 
@@ -131,6 +130,44 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
+  void _showAboutApp() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('О приложении'),
+        content: const Text(
+          'Приложение "CarRentalApp" предназначено для аренды автомобилей. '
+          'Вы можете бронировать машины, просматривать историю поездок, '
+          'добавлять карты и оплачивать аренду.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ОК')),
+        ],
+      ),
+    );
+  }
+
+  void _showTermsOfUse() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Условия использования'),
+        content: const SingleChildScrollView(
+          child: Text(
+            '1. Пользователь обязуется использовать приложение в законных целях.\n'
+            '2. Аренда возможна только при наличии подтверждённого профиля.\n'
+            '3. Администрация не несёт ответственности за действия пользователей вне платформы.\n'
+            '4. При нарушении условий доступ может быть ограничен.\n\n'
+            'Полный текст доступен на сайте компании.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Понятно')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -142,28 +179,43 @@ class _MenuScreenState extends State<MenuScreen> {
             const SizedBox(height: 8),
             _buildThemeSwitcher(),
             const SizedBox(height: 24),
-ListTile(
-  leading: const Icon(Icons.credit_card),
-  title: const Text('Способ оплаты'),
-  onTap: () => context.push('/save-card'),
-),
-ListTile(
-  leading: const Icon(Icons.history),
-  title: const Text('История бронирований'),
-  onTap: () => context.push('/history'),
-),
-    const Divider(height: 32),
-    ListTile(
-      leading: const Icon(Icons.exit_to_app),
-      title: const Text('Выйти из аккаунта'),
-      textColor: Colors.red,
-      iconColor: Colors.red,
-      onTap: _logout,
-    ),
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text('Способ оплаты'),
+              onTap: () => context.push('/save-card'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('История бронирований'),
+              onTap: () => context.push('/history'),
+            ),
+            const Divider(height: 32),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: const Text('Выйти из аккаунта'),
+              textColor: Colors.red,
+              iconColor: Colors.red,
+              onTap: _logout,
+            ),
             const Divider(height: 32),
             const Text(
-              '📋 Информация о приложении\n\n- Помощь\n- Условия использования',
-              style: TextStyle(fontSize: 14),
+              '📋 Информация',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('О приложении'),
+              onTap: _showAboutApp,
+            ),
+            ListTile(
+              leading: const Icon(Icons.verified_user_outlined),
+              title: const Text('Условия использования'),
+              onTap: () => context.push('/terms'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Инструкция'),
+              onTap: () => context.push('/user-guide'),
             ),
           ],
         ),

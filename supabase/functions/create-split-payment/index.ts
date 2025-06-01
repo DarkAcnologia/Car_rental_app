@@ -1,14 +1,12 @@
-import Stripe from "https://esm.sh/stripe@13.1.0?target=deno";
-
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
-  apiVersion: "2022-11-15",
-});
-
+// supabase/functions/check-split-payment-status/index.ts
 Deno.serve(async (req) => {
   try {
     const { split_payment_id } = await req.json();
     if (!split_payment_id) {
-      return new Response(JSON.stringify({ error: "Missing split_payment_id" }), { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Missing split_payment_id" }),
+        { status: 400 }
+      );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -25,39 +23,60 @@ Deno.serve(async (req) => {
     );
     const splitData = await splitRes.json();
     const payment = splitData[0];
-
     if (!payment) {
-      return new Response(JSON.stringify({ error: "Split payment not found" }), { status: 404 });
+      return new Response(JSON.stringify({ paid: false }), { status: 404 });
     }
 
-    // Создаём Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "rub",
-            product_data: {
-              name: `Оплата от ${payment.contributor_name}`,
-            },
-            unit_amount: Math.round(payment.amount * 100),
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        split_payment_id,
-        booking_id: payment.booking_id,
-        contributor: payment.contributor_name,
+    const bookingId = payment.booking_id;
+
+    // Получаем всех, кто не оплатил
+    const unpaidRes = await fetch(
+      `${supabaseUrl}/rest/v1/split_payments?booking_id=eq.${bookingId}&is_paid=eq.false`,
+      { headers }
+    );
+    const unpaid = await unpaidRes.json();
+
+    // Получаем всех, кто оплатил
+    const paidRes = await fetch(
+      `${supabaseUrl}/rest/v1/split_payments?booking_id=eq.${bookingId}&is_paid=eq.true`,
+      { headers }
+    );
+    const paid = await paidRes.json();
+    const paidAmount = paid.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+
+    // Получаем общую сумму из booking
+    const bookingRes = await fetch(
+      `${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}&select=total_price`,
+      { headers }
+    );
+    const bookingJson = await bookingRes.json();
+    const totalPrice = bookingJson[0]?.total_price ?? 0;
+
+    const unpaidAmount = totalPrice - paidAmount;
+
+    // Гарантированно обновим корректный статус
+    const finalStatus = unpaidAmount <= 0 ? "success" : "failed";
+    const safeUnpaid = unpaidAmount <= 0 ? 0 : unpaidAmount;
+
+    await fetch(`${supabaseUrl}/rest/v1/bookings?id=eq.${bookingId}`, {
+      method: "PATCH",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
       },
-      success_url: "https://example.com/success", // заменишь на нужный
-      cancel_url: "https://example.com/cancel",
+      body: JSON.stringify({
+        payment_status: finalStatus,
+        unpaid_amount: safeUnpaid
+      }),
     });
 
-    return new Response(JSON.stringify({ url: session.url }), { status: 200 });
+    return new Response(JSON.stringify({ paid: payment.is_paid }), { status: 200 });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500 }
+    );
   }
 });

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'signup_screen.dart';
 import 'change_password_screen.dart';
 
@@ -31,7 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> loginWithGoogle() async {
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(Provider.google);
+      await Supabase.instance.client.auth.signInWithOAuth(
+        Provider.google,
+        authScreenLaunchMode: LaunchMode.externalApplication,
+        // prompt=select_account работает не всегда, но Supabase сам добавляет нужные параметры
+      );
     } on AuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
@@ -39,6 +45,17 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка входа через Google')),
+      );
+    }
+  }
+
+  Future<void> logoutFromGoogle() async {
+    const logoutUrl = 'https://accounts.google.com/logout';
+    if (await canLaunchUrl(Uri.parse(logoutUrl))) {
+      await launchUrl(Uri.parse(logoutUrl), mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть logout-ссылку')),
       );
     }
   }
@@ -89,6 +106,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 backgroundColor: Colors.redAccent,
                 foregroundColor: Colors.white,
               ),
+            ),
+            TextButton(
+              onPressed: logoutFromGoogle,
+              child: Text('Сменить Google-аккаунт'),
             ),
             TextButton(
               onPressed: () {
