@@ -36,7 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await Supabase.instance.client.auth.signInWithOAuth(
         Provider.google,
         authScreenLaunchMode: LaunchMode.externalApplication,
-        // prompt=select_account работает не всегда, но Supabase сам добавляет нужные параметры
+
       );
     } on AuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

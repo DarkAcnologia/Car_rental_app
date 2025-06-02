@@ -11,18 +11,18 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 1; // ❗ Переходим сразу на Карту
+  int _currentIndex = 1; 
 
   final List<Widget> _screens = [
     const menu.MenuScreen(),
-    const map.MapScreen(), // ❗ Карта посередине
+    const map.MapScreen(), 
     const profile.ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true, // ❗ Позволяет телу заходить под bottomNavigationBar
+      extendBody: true, 
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

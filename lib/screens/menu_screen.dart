@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:car_rental_app/screens/booking_history_screen.dart';
-import 'package:car_rental_app/screens/login_screen.dart';
-import 'package:car_rental_app/screens/save_card_screen.dart';
 import '../main.dart';
 import 'package:car_rental_app/state/trip_state.dart';
 
@@ -147,26 +144,6 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  void _showTermsOfUse() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Условия использования'),
-        content: const SingleChildScrollView(
-          child: Text(
-            '1. Пользователь обязуется использовать приложение в законных целях.\n'
-            '2. Аренда возможна только при наличии подтверждённого профиля.\n'
-            '3. Администрация не несёт ответственности за действия пользователей вне платформы.\n'
-            '4. При нарушении условий доступ может быть ограничен.\n\n'
-            'Полный текст доступен на сайте компании.',
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Понятно')),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

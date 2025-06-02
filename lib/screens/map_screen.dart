@@ -4,10 +4,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:car_rental_app/state/trip_state.dart';
-import 'filter_screen.dart';
 import 'shared_payment_screen.dart';
 import 'contributor_input_screen.dart';
-import 'menu_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -150,76 +148,100 @@ class _MapScreenState extends State<MapScreen> {
         scale: 2,
       ),
     ),
-    onTap: (_, __) async {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+onTap: (_, __) async {
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return;
 
-      final theme = Theme.of(context);
+  final theme = Theme.of(context);
 
-      // 1. Проверка верификации
-      final response = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .maybeSingle();
+  // 🚫 Проверка: если уже арендуется машина
+  if (trip.activeCar != null) {
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+          contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+          title: const Text('Уже активна поездка'),
+          content: const Text('Вы уже арендуете другую машину. Завершите текущую поездку, чтобы начать новую.'),
+          actions: [
+            TextButton(
+              child: const Text('Понял'),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          ],
+        ),
+      );
+    }
+    return;
+  }
 
-      final profile = response as Map<String, dynamic>?;
+  // 1. Проверка верификации
+  final response = await Supabase.instance.client
+      .from('profiles')
+      .select()
+      .eq('id', user.id)
+      .maybeSingle();
 
-      if (profile == null || profile['is_verified'] != true) {
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              backgroundColor: theme.colorScheme.surface,
-              titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
-              contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-              title: const Text('Аккаунт не верифицирован'),
-              content: const Text('Ожидайте подтверждения ваших данных администрацией.'),
-              actions: [
-                TextButton(
-                  child: const Text('ОК'),
-                  onPressed: () => Navigator.of(context).pop(),
-                )
-              ],
-            ),
-          );
-        }
-        return;
-      }
+  final profile = response as Map<String, dynamic>?;
 
-      // 2. Проверка задолженности
-      final unpaidRes = await Supabase.instance.client
-          .from('bookings')
-          .select()
-          .eq('user_id', user.id)
-          .eq('payment_status', 'failed');
+  if (profile == null || profile['is_verified'] != true) {
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+          contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+          title: const Text('Аккаунт не верифицирован'),
+          content: const Text('Ожидайте подтверждения ваших данных администрацией.'),
+          actions: [
+            TextButton(
+              child: const Text('ОК'),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          ],
+        ),
+      );
+    }
+    return;
+  }
 
-      if (unpaidRes != null && unpaidRes is List && unpaidRes.isNotEmpty) {
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              backgroundColor: theme.colorScheme.surface,
-              titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
-              contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-              title: const Text('Неоплаченная поездка'),
-              content: const Text('У вас есть поездка с неуспешной оплатой. Погасите задолженность перед новой арендой.Это можно сделать в истории бронированний'),
-              actions: [
-                TextButton(
-                  child: const Text('ОК'),
-                  onPressed: () => Navigator.of(context).pop(),
-                )
-              ],
-            ),
-          );
-        }
-        return;
-      }
+  // 2. Проверка задолженности
+  final unpaidRes = await Supabase.instance.client
+      .from('bookings')
+      .select()
+      .eq('user_id', user.id)
+      .eq('payment_status', 'failed');
 
-      // 3. Всё в порядке — показываем машину
-      setState(() => selectedCar = car);
-      _showCarBottomSheet(context, car);
-    },
+  if (unpaidRes != null && unpaidRes is List && unpaidRes.isNotEmpty) {
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          titleTextStyle: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+          contentTextStyle: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+          title: const Text('Неоплаченная поездка'),
+          content: const Text('У вас есть поездка с неуспешной оплатой. Погасите задолженность перед новой арендой. Это можно сделать в истории бронирований.'),
+          actions: [
+            TextButton(
+              child: const Text('ОК'),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          ],
+        ),
+      );
+    }
+    return;
+  }
+
+  // 3. Всё в порядке — показываем машину
+  setState(() => selectedCar = car);
+  _showCarBottomSheet(context, car);
+}
+
   );
 }).whereType<PlacemarkMapObject>(),
 
@@ -603,28 +625,7 @@ if (car['is_engine_on'] == true)
     });
     }
 
-Future<void> _showNotVerifiedDialog(BuildContext context) async {
-  final theme = Theme.of(context);
-  final bgColor = theme.colorScheme.surface;
-  final txtColor = theme.colorScheme.onSurface;
 
-  return showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      backgroundColor: bgColor,
-      titleTextStyle: TextStyle(color: txtColor, fontSize: 20, fontWeight: FontWeight.bold),
-      contentTextStyle: TextStyle(color: txtColor),
-      title: const Text('Аккаунт не верифицирован'),
-      content: const Text('Ожидайте подтверждения ваших данных администрацией.'),
-      actions: [
-        TextButton(
-          child: const Text('ОК'),
-          onPressed: () => Navigator.of(context).pop(),
-        )
-      ],
-    ),
-  );
-}
 
     Widget _actionButton(IconData icon, String text, VoidCallback onPressed, {Color? color, Color? textColor}) {
       return Expanded(
@@ -764,7 +765,7 @@ await Supabase.instance.client.from('bookings').insert({
       booking = insertResponse;
     } else {
       booking = bookingRaw as Map<String, dynamic>;
-      // Обновим start_time и end_time до текущего момента, т.к. поездка началась
+     
       await Supabase.instance.client
           .from('bookings')
           .update({
@@ -785,7 +786,7 @@ await Supabase.instance.client.from('bookings').insert({
     trip.priceTimer?.cancel();
     trip.priceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _billIfNeeded());
     
-    await _billInitialMinute(); // 💸 Мгновенное первое начисление
+    await _billInitialMinute(); 
 
     setState(() {
       _bookedCar = null;

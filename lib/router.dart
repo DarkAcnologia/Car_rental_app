@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+
 import 'package:go_router/go_router.dart';
 import 'screens/auth_gate.dart';
 import 'screens/reset_password_screen.dart';
@@ -7,7 +7,6 @@ import 'screens/login_screen.dart';
 import 'screens/filter_screen.dart';
 import 'screens/booking_history_screen.dart';
 import 'screens/map_screen.dart';
-import 'screens/payment_method_screen.dart';
 import 'screens/save_card_screen.dart';
 import 'screens/instruction_screen.dart';
 import 'screens/terms_of_use_screen.dart';
@@ -71,9 +70,6 @@ GoRoute(
   path: '/terms',
   builder: (context, state) => const TermsOfUseScreen(),
 ),
-    GoRoute(
-  path: '/payment-method',
-  builder: (context, state) => const PaymentMethodScreen(),
-),
+
   ],
 );

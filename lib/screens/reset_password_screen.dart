@@ -45,7 +45,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SnackBar(content: Text('Пароль успешно обновлён')),
         );
 
-        context.go('/login'); // ✅ переход на экран входа
+        context.go('/login'); 
       }
     } on AuthException catch (e) {
       if (e.message.contains("similar")) {

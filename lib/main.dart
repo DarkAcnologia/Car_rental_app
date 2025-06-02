@@ -32,8 +32,7 @@ void main() async {
   );
 
   // Initialize Stripe
-  Stripe.publishableKey = 'pk_test_51RU6hp2f1FykPDLPPZ7exqeEMeQUPqEHBMOEHmuXbA6qJ3O44KCe700pCAcCqFDhIGbt6KlYU89dXOoheq0Ivwje00iYwL3q6L'; // Замени на свой
-  await Stripe.instance.applySettings(); 
+  Stripe.publishableKey = 'pk_test_51RU6hp2f1FykPDLPPZ7exqeEMeQUPqEHBMOEHmuXbA6qJ3O44KCe700pCAcCqFDhIGbt6KlYU89dXOoheq0Ivwje00iYwL3q6L';
   runApp(const MyApp());
 }
 
